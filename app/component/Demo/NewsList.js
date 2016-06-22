@@ -1,17 +1,20 @@
 import React,{Component} from 'react';
-import  {View,Text,StyleSheet,PixelRatio,Image,ListView,ScrollView,Dimensions,ProgressBarAndroid,RefreshControl} from  'react-native';
+import  {View,Text,StyleSheet,PixelRatio,Image,ListView,ScrollView,Dimensions,ProgressBarAndroid,RefreshControl,InteractionManager} from  'react-native';
 import {REQUIRE_NEWS_URL,APIKEY} from '../../constant/DataSource.js';
+import {LOADSTATE} from '../../constant/Constant.js';
 
 let ds=new ListView.DataSource({rowHasChanged:(r1,r2)=>r1!==r2});
 let key="newslist";
-let len=40;
-let count=0;
+
+let total=0;
+let currentCount=0;
+let data=[];
+let page=1;
 
 class  NewsList extends  Component{
-
     state={
         dataSource:ds,
-        loaded:false
+        loaded:LOADSTATE.Loading
     }
 
     render(){
@@ -24,8 +27,39 @@ class  NewsList extends  Component{
 
     loadDataView(){
         return(
-            <ListView refreshControl={this.refreshControlView()}  dataSource={this.state.dataSource} renderRow={this.renderRow} />
+            <ListView onEndReachedThreshold={70}  pageSize={1} renderFooter={()=>this.loadMoreView()}  onEndReached={()=>this.loadMore()} contentContainerStyle={{paddingBottom:90}} refreshControl={this.refreshControlView()}  dataSource={this.state.dataSource} renderRow={this.renderRow} />
         )
+    }
+
+    loadMore(){
+
+
+        InteractionManager.runAfterInteractions(() => {
+            if(this.state.loaded==LOADSTATE.Loaded){
+                this.getData();
+                this.setState({
+                    loaded:LOADSTATE.LoadMore
+                });
+            }
+        });
+
+
+    }
+
+    loadMoreView(){
+        // if(this.state.loaded==LOADSTATE.Loaded){
+            page++;
+            if(this.state.loaded==LOADSTATE.LoadMore){
+                return(
+                    <View style={styles.more}>
+                        <ProgressBarAndroid style={styles.moreLoading}  styleAttr="SmallInverse" />
+                        <Text style={styles.moreText}>
+                            加载更多...
+                        </Text>
+                    </View>
+                )
+            }
+        // }
     }
 
     refreshControlView(){
@@ -36,20 +70,20 @@ class  NewsList extends  Component{
 
     loadingView(){
         return(
-            <ProgressBarAndroid styleAttr="Inverse" />
+            <ProgressBarAndroid style={{marginTop:100}} styleAttr="Inverse" />
         )
     }
 
     reloadData(){
-       this.getData();
+        InteractionManager.runAfterInteractions(() => {
+            this.getData();
+        });
        this.setState({
            loaded:false
        })
     }
     renderRow(record){
-        count++;
         let title=record.title;
-        let titLen=title.length;
         let src={uri:record.picUrl};
         let time=record.ctime;
         return(
@@ -68,22 +102,42 @@ class  NewsList extends  Component{
     }
 
     componentWillMount(){
-        this.getData();
+        InteractionManager.runAfterInteractions(() => {
+            this.getData();
+        });
     }
 
     getData(){
-        fetch(REQUIRE_NEWS_URL,{
+        fetch(REQUIRE_NEWS_URL+"&page="+page,{
             headers:{
                 apikey:APIKEY
             }
         }).then((response)=>response.json()).then((reponseData)=>{
+            total=reponseData[key].length;
+            if(this.state.loaded==LOADSTATE.LoadMore){
+                data=data.concat(reponseData[key]);
+            }else{
+                page=0;
+                data=reponseData[key];
+            }
             this.setState({
-                dataSource:ds.cloneWithRows(reponseData[key]),
-                loaded:true
+                dataSource:ds.cloneWithRows(data),
+                loaded:LOADSTATE.Loaded
             })
         }).catch((error)=>{
-            alert(error);
+            return this.renderErrorView(error)
         })
+    }
+
+    renderErrorView(error){
+        return (
+            <View>
+                <Text>
+                   亲~出现错误了  {error}
+                </Text>
+            </View>
+
+        )
     }
 }
 
@@ -95,13 +149,13 @@ let styles=StyleSheet.create({
          padding:14,
          flexDirection:'row',
          borderBottomWidth:3/PixelRatio.get(),
-         borderBottomColor:"#ddd",
-         justifyContent:"center"
+         borderBottomColor:"#ddd"
      },
     text:{
         color:'#000',
         fontSize:18,
-        height:86
+        height:86,
+        marginRight:10
     },
     time:{
         textAlign:"right",
@@ -116,7 +170,23 @@ let styles=StyleSheet.create({
     newsImg:{
         width:100,
         height:100
-    }
+    },
+    more:{
+        flex:1,
+        flexDirection:"row",
+        alignItems:"center",
+        justifyContent:"center"
+    },
+    moreLoading:{
+        marginTop:10,marginRight:10
+    },
+    moreText:{
+        textAlign:"center",
+        color:"#ccc",
+        marginTop:10,
+        fontSize:16
+    },
+
 
 })
 export  default NewsList;
